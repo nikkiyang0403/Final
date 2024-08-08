@@ -1,0 +1,121 @@
+---
+title: "NYPD Shooting Project"
+output: html_document
+date: "2024-08-07"
+---
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+# install.packages("tidyverse")
+# install.packages("prophet")
+# install.packages("library")
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+```
+### Load Data
+
+```{r}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv"
+NYPD <- read_csv(url_in)
+summary(NYPD)
+```
+
+### Select the columns that are useful for the analysis
+```{r}
+data_new = NYPD %>% select(INCIDENT_KEY,OCCUR_DATE,OCCUR_TIME,BORO,STATISTICAL_MURDER_FLAG,PERP_AGE_GROUP,PERP_SEX,PERP_RACE,VIC_AGE_GROUP,VIC_RACE)
+print(data_new)
+```
+
+### Handle missing values: Replace all the blank cells or null with "Unknown"
+
+```{r}
+data_new[data_new == ""] <- "UNKNOWN"
+data_new[data_new == "(null)"] <- "UNKNOWN"
+data_new
+```
+
+### Remove the value that doesn't make sense in the age group
+
+```{r}
+data_new = subset(data_new, PERP_AGE_GROUP!="1028" & PERP_AGE_GROUP!="1020" & PERP_AGE_GROUP!="224" & PERP_AGE_GROUP!="940")
+data_new = subset(data_new, VIC_AGE_GROUP!="1022")
+
+```
+
+### Convert the vector into factor and make sure there is no invalid age group
+
+```{r}
+data_new$PERP_AGE_GROUP = as.factor(data_new$PERP_AGE_GROUP)
+summary(data_new$PERP_AGE_GROUP)
+```
+
+### Data Visualization and Analysis
+
+Question 1: Which part of New York has the most incidents?
+
+```{r}
+ggplot(data_new,aes(x = BORO)) + geom_bar() + labs(title = "Boroughs of NY City", x = "Boroughs of NY City", y = "Count of Incidents") + theme_minimal()
+
+```
+
+```{r}
+table(data_new$BORO, data_new$STATISTICAL_MURDER_FLAG)
+```
+Brooklyn has the most incidents.
+
+Question 2: Which age group has the most perpetrator?
+```{r}
+ggplot(data_new,aes(x = PERP_AGE_GROUP)) + geom_bar() + labs(title = "Which age group has the most perpetrator", x = "PERP_AGE_GROUP", y = "Count of Incidents") + theme_minimal()
+```
+
+Age 18-44 (age bin 18-24 and 25-44) has the most perpetrator.
+
+Question 3: Which age group has the most victims?
+```{r}
+ggplot(data_new,aes(x = VIC_AGE_GROUP)) + geom_bar() + labs(title = "Which age group has the most incidents", x = "VIC_AGE_GROUP", y = "Count of Incidents") + theme_minimal()
+```
+
+Age 25-44 has the most incidents.
+
+Question 4: The profile of perpetrators
+```{r}
+table(data_new$PERP_SEX, data_new$PERP_RACE)
+```
+There are significantly more male perpetrators than female perpetrators, and most of them are Black and White Hispanic.
+
+### Building a model 
+I will use the following model to estimate the chance of a perpetrator belongs to a certain race, sex or age group. 
+```
+glm.fit = glm(data_new$STATISTICAL_MURDER_FLAG ~ data_new$PERP_AGE_GROUP + data_new$PERP_SEX + data_new$PERP_RACE)
+glm.fit
+```
+
+```
+Call:
+glm(formula = data_new$STATISTICAL_MURDER_FLAG ~ data_new$PERP_AGE_GROUP + 
+    data_new$PERP_SEX + data_new$PERP_RACE)
+
+Coefficients: (1 not defined because of singularities)
+                                           Estimate Std. Error t value Pr(>|t|)    
+(Intercept)                                -0.04193    0.27524  -0.152 0.878914    
+data_new$PERP_AGE_GROUP1028                -0.17566    0.38887  -0.452 0.651477    
+data_new$PERP_AGE_GROUP18-24                0.03029    0.01065   2.845 0.004447 ** 
+data_new$PERP_AGE_GROUP25-44                0.08499    0.01073   7.921 2.44e-15 ***
+data_new$PERP_AGE_GROUP45-64                0.16320    0.01760   9.275  < 2e-16 ***
+data_new$PERP_AGE_GROUP65+                  0.17589    0.04954   3.550 0.000385 ***
+data_new$PERP_AGE_GROUPUnknown             -0.15642    0.01358 -11.519  < 2e-16 ***
+data_new$PERP_SEXM                         -0.03142    0.01874  -1.677 0.093647 .  
+data_new$PERP_SEXU                          0.06870    0.02913   2.358 0.018366 *  
+data_new$PERP_SEXUnknown                    0.37594    0.27528   1.366 0.172056    
+data_new$PERP_RACEASIAN / PACIFIC ISLANDER  0.32319    0.27666   1.168 0.242733    
+data_new$PERP_RACEBLACK                     0.24901    0.27506   0.905 0.365314    
+data_new$PERP_RACEBLACK HISPANIC            0.23463    0.27524   0.852 0.393963    
+data_new$PERP_RACEUnknown                        NA         NA      NA       NA    
+data_new$PERP_RACEUNKNOWN                   0.19759    0.27584   0.716 0.473790    
+data_new$PERP_RACEWHITE                     0.35917    0.27597   1.302 0.193096    
+data_new$PERP_RACEWHITE HISPANIC            0.27248    0.27514   0.990 0.322015    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for gaussian family taken to be 0.1511281)
+```
